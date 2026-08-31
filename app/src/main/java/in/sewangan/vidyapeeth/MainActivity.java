@@ -13,29 +13,66 @@ public class MainActivity extends Activity {
     private static final String CHANNEL_ID = "vidyapeeth_notifications";
     private static final AtomicInteger NOTIFICATION_ID = new AtomicInteger(1000);
     private WebView webView;
+    private PermissionRequest pendingWebPermissionRequest;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         createNotificationChannel();
         requestNotificationPermission();
+
         webView = new WebView(this);
         setContentView(webView, new FrameLayout.LayoutParams(-1,-1));
+
         WebSettings s=webView.getSettings();
-        s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setAllowFileAccess(true);
-        s.setMediaPlaybackRequiresUserGesture(false); s.setBuiltInZoomControls(false); s.setDisplayZoomControls(false);
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true);
+        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient(){
-            @Override public void onPermissionRequest(PermissionRequest request){
+            @Override public void onPermissionRequest(final PermissionRequest request){
                 runOnUiThread(() -> {
-                    if(Build.VERSION.SDK_INT>=23 && checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+                    boolean wantsVideo=false;
+                    for(String resource: request.getResources()){
+                        if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)){
+                            wantsVideo=true;
+                            break;
+                        }
+                    }
+
+                    if(wantsVideo && Build.VERSION.SDK_INT>=23 &&
+                       checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+                        pendingWebPermissionRequest=request;
                         requestPermissions(new String[]{Manifest.permission.CAMERA},200);
+                        return;
                     }
                     request.grant(request.getResources());
                 });
             }
+
+            @Override public void onPermissionRequestCanceled(PermissionRequest request){
+                if(pendingWebPermissionRequest==request) pendingWebPermissionRequest=null;
+            }
         });
+
         webView.addJavascriptInterface(new NativeBridge(),"VidyapeethAndroid");
         webView.loadUrl("file:///android_asset/www/index.html");
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults){
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if(requestCode==200 && pendingWebPermissionRequest!=null){
+            final PermissionRequest req=pendingWebPermissionRequest;
+            pendingWebPermissionRequest=null;
+            if(grantResults.length>0 && grantResults[0]==PackageManager.PERMISSION_GRANTED){
+                req.grant(req.getResources());
+            }else{
+                req.deny();
+            }
+        }
     }
 
     private void createNotificationChannel(){
@@ -45,19 +82,23 @@ public class MainActivity extends Activity {
             getSystemService(NotificationManager.class).createNotificationChannel(c);
         }
     }
+
     private void requestNotificationPermission(){
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},201);
     }
+
     public class NativeBridge {
         @JavascriptInterface public void notify(String title,String message){ runOnUiThread(() -> showNotification(title,message)); }
         @JavascriptInterface public boolean isAndroidApp(){ return true; }
         @JavascriptInterface public String getPushToken(){ return getSharedPreferences("push", MODE_PRIVATE).getString("fcm_token", ""); }
     }
+
     private void showNotification(String title,String message){
         Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL_ID):new Notification.Builder(this);
         b.setSmallIcon(R.drawable.ic_notification).setContentTitle(title==null?"Sewangan Vidyapeeth":title).setContentText(message).setStyle(new Notification.BigTextStyle().bigText(message)).setAutoCancel(true);
         ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFICATION_ID.incrementAndGet(),b.build());
     }
+
     @Override public void onBackPressed(){ if(webView!=null && webView.canGoBack()) webView.goBack(); else super.onBackPressed(); }
 }
