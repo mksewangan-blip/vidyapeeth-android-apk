@@ -1,5 +1,0 @@
-<resources>
-    <string name="app_name">Sewangan Vidyapeeth Admin</string>
-    <string name="notification_channel_name">Vidyapeeth Notifications</string>
-    <string name="notification_channel_description">Attendance, requests and administration notifications</string>
-</resources>
