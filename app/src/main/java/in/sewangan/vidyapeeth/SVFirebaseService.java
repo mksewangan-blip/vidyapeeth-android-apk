@@ -1,0 +1,5 @@
+package in.sewangan.vidyapeeth;
+import com.google.firebase.messaging.FirebaseMessagingService;import com.google.firebase.messaging.RemoteMessage;import android.app.*;import android.content.*;import android.os.Build;
+public class SVFirebaseService extends FirebaseMessagingService{
+ @Override public void onMessageReceived(RemoteMessage m){String title="Sewangan Vidyapeeth",body="New notification";if(m.getNotification()!=null){if(m.getNotification().getTitle()!=null)title=m.getNotification().getTitle();if(m.getNotification().getBody()!=null)body=m.getNotification().getBody();}NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);String id="vidyapeeth_notifications";if(Build.VERSION.SDK_INT>=26)nm.createNotificationChannel(new NotificationChannel(id,"Vidyapeeth Notifications",NotificationManager.IMPORTANCE_HIGH));Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,id):new Notification.Builder(this);b.setContentTitle(title).setContentText(body).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true);nm.notify((int)(System.currentTimeMillis()%100000),b.build());}
+}
