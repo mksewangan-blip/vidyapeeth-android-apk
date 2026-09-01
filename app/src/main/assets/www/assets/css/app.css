@@ -29,3 +29,4 @@
 .header{padding-top:max(10px,env(safe-area-inset-top));min-height:calc(62px + env(safe-area-inset-top))}
 .face-att-camera video,.camera video{background:#111;transform:translateZ(0)}
 .listitem{content-visibility:auto;contain-intrinsic-size:64px}
+.preview-wrap{position:relative;min-width:0}.preview-wrap img{width:100%;height:100%;object-fit:cover;border-radius:10px}.preview-wrap small{position:absolute;right:4px;bottom:4px;background:#fff;border-radius:999px;padding:1px 5px;font-weight:700}

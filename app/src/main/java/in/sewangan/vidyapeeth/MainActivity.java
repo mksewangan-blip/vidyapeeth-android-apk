@@ -4,10 +4,16 @@ import android.Manifest;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.ContentValues;
+import android.content.Context;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Base64;
+import android.webkit.JavascriptInterface;
+import android.widget.Toast;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -24,6 +30,8 @@ import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity {
@@ -35,6 +43,83 @@ public class MainActivity extends AppCompatActivity {
     private WebViewAssetLoader assetLoader;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraOutputUri;
+
+
+    public class AndroidBridge {
+        private final Context context;
+        AndroidBridge(Context context) { this.context = context; }
+
+        private byte[] decode(String dataUrl) {
+            try {
+                int comma = dataUrl.indexOf(',');
+                String raw = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
+                return Base64.decode(raw, Base64.DEFAULT);
+            } catch (Exception e) { return null; }
+        }
+
+        private File cacheImage(String dataUrl, String filename) throws Exception {
+            byte[] bytes = decode(dataUrl);
+            if (bytes == null) throw new IOException("Invalid image data");
+            File dir = new File(getCacheDir(), "shared_images");
+            if (!dir.exists()) dir.mkdirs();
+            File f = new File(dir, filename.replaceAll("[^A-Za-z0-9._-]", "_"));
+            try (FileOutputStream out = new FileOutputStream(f)) { out.write(bytes); }
+            return f;
+        }
+
+        @JavascriptInterface
+        public void viewImage(String dataUrl, String filename) {
+            runOnUiThread(() -> {
+                try {
+                    File f = cacheImage(dataUrl, filename);
+                    Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName()+".fileprovider", f);
+                    Intent i = new Intent(Intent.ACTION_VIEW);
+                    i.setDataAndType(uri, "image/jpeg");
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(i, "View ID card"));
+                } catch (Exception e) { Toast.makeText(context, "Unable to open ID card", Toast.LENGTH_SHORT).show(); }
+            });
+        }
+
+        @JavascriptInterface
+        public void shareImage(String dataUrl, String filename) {
+            runOnUiThread(() -> {
+                try {
+                    File f = cacheImage(dataUrl, filename);
+                    Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName()+".fileprovider", f);
+                    Intent i = new Intent(Intent.ACTION_SEND);
+                    i.setType("image/jpeg");
+                    i.putExtra(Intent.EXTRA_STREAM, uri);
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(i, "Share ID card"));
+                } catch (Exception e) { Toast.makeText(context, "Unable to share ID card", Toast.LENGTH_SHORT).show(); }
+            });
+        }
+
+        @JavascriptInterface
+        public void saveImage(String dataUrl, String filename) {
+            new Thread(() -> {
+                try {
+                    byte[] bytes = decode(dataUrl);
+                    if (bytes == null) throw new IOException("Invalid image data");
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        ContentValues values = new ContentValues();
+                        values.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
+                        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Vidyapeeth Admin");
+                        Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                        if (uri == null) throw new IOException("Unable to create file");
+                        try (OutputStream out = getContentResolver().openOutputStream(uri)) { out.write(bytes); }
+                    } else {
+                        File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                        File f = new File(dir, filename);
+                        try (FileOutputStream out = new FileOutputStream(f)) { out.write(bytes); }
+                    }
+                    runOnUiThread(() -> Toast.makeText(context, "ID card saved", Toast.LENGTH_SHORT).show());
+                } catch (Exception e) { runOnUiThread(() -> Toast.makeText(context, "Unable to save ID card", Toast.LENGTH_SHORT).show()); }
+            }).start();
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,6 +145,8 @@ public class MainActivity extends AppCompatActivity {
         assetLoader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
                 .build();
+
+        web.addJavascriptInterface(new AndroidBridge(this), "VidyapeethAndroid");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
