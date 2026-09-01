@@ -1,7 +1,7 @@
 plugins { id 'com.android.application'; id 'com.google.gms.google-services' }
 
 android { namespace 'in.sewangan.vidyapeeth'; compileSdk 35
-    defaultConfig { applicationId 'in.sewangan.vidyapeeth'; minSdk 24; targetSdk 35; versionCode 11; versionName '11.0' }
+    defaultConfig { applicationId 'in.sewangan.vidyapeeth'; minSdk 24; targetSdk 35; versionCode 13; versionName '13.0' }
 }
 
 dependencies {
